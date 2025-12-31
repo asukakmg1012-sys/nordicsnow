@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nordic Quiet Night Snow</title>
+
+  <!-- SEO & SNS OGP -->
+  <meta name="description" content="静かな北欧の夜、雪がゆっくりと舞うWebアニメーション。" />
+  <meta property="og:title" content="Nordic Quiet Night Snow" />
+  <meta property="og:description" content="静かな北欧の夜、雪がゆっくりと舞うWebアニメーション。" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:," />
+
+  <!-- Serif（おしゃれ・上品・可読性高め） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-top:#0b1320;
+      --bg-mid:#0a0f18;
+      --bg-bot:#070b11;
+
+      --serif: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Palatino,
+               "Baskerville", "Georgia", "Times New Roman", serif;
+      --text: #e8eef7;
+    }
+
+    html, body { height: 100%; }
+    body{
+      margin:0;
+      color: var(--text);
+      font-family: var(--serif);
+      background:
+        radial-gradient(1200px 800px at 30% 20%, rgba(180,200,255,0.10), transparent 55%),
+        radial-gradient(900px 600px at 70% 30%, rgba(170,220,255,0.06), transparent 60%),
+        linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 55%, var(--bg-bot) 100%);
+      overflow:hidden;
+    }
+
+    .nordic-stage{
+      position:relative;
+      width:100vw;
+      height:100vh;
+      overflow:hidden;
+    }
+
+    canvas#snow{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      display:block;
+    }
+
+    .overlay{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background:
+        radial-gradient(120% 90% at 50% 30%, rgba(255,255,255,0.03), transparent 55%),
+        radial-gradient(110% 120% at 50% 70%, transparent 55%, rgba(0,0,0,0.35) 100%);
+      mix-blend-mode: screen;
+      opacity: 0.9;
+    }
+
+    /* ===== タイポ（北欧の静けさ：セリフ + 余白 + 低コントラスト） ===== */
+    .center{
+      position:absolute;
+      inset:0;
+      display:grid;
+      place-items:center;
+      text-align:center;
+      user-select:none;
+      pointer-events:none;
+      padding: 8vh 6vw;
+    }
+
+    .center .stack{
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+      align-items:center;
+    }
+
+    .center h1{
+      margin:0;
+      font-size: clamp(26px, 3.2vw, 44px);
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      line-height: 1.12;
+      opacity: 0.92;
+      text-rendering: geometricPrecision;
+    }
+
+    .center p{
+      margin:0;
+      font-size: clamp(12px, 1.1vw, 15px);
+      font-weight: 400;
+      letter-spacing: 0.14em;
+      line-height: 1.6;
+      opacity: 0.62;
+      font-variant-ligatures: common-ligatures;
+    }
+
+    /* ほんの少しだけ“印刷物感” */
+    .center h1, .center p{
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      .overlay{ opacity: 0.6; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="nordic-stage" id="stage">
+    <canvas id="snow" aria-hidden="true"></canvas>
+    <div class="overlay" aria-hidden="true"></div>
+
+    <div class="center" aria-hidden="true">
+      <div class="stack">
+        <h1>Quiet Nordic Night</h1>
+        <p>snow drifting slowly</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const stage  = document.getElementById("stage");
+      const canvas = document.getElementById("snow");
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      const CONFIG = {
+        intensity: 1.4, // 雪の量
+        wind: 0.10,     // 控えめな風
+        dprMax: 2       // 重い場合は 1 にすると軽くなる
+      };
+
+      if (!stage || !canvas || reduce) return;
+
+      const ctx = canvas.getContext("2d", { alpha: true });
+      if (!ctx) return;
+
+      const state = { w: 0, h: 0, dpr: 1, flakes: [], lastT: 0, raf: 0 };
+
+      const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+      const rand  = (min, max) => Math.random() * (max - min) + min;
+
+      function resize(){
+        state.dpr = Math.min(CONFIG.dprMax, window.devicePixelRatio || 1);
+        const rect = stage.getBoundingClientRect();
+        state.w = Math.max(1, Math.floor(rect.width));
+        state.h = Math.max(1, Math.floor(rect.height));
+
+        canvas.width  = Math.floor(state.w * state.dpr);
+        canvas.height = Math.floor(state.h * state.dpr);
+        canvas.style.width  = state.w + "px";
+        canvas.style.height = state.h + "px";
+
+        ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+      }
+
+      function makeFlake(spawnY = -20){
+        const z = Math.pow(Math.random(), 1.8);
+
+        const r  = rand(0.6, 2.2) * (1.0 + (1 - z) * 1.4);
+        const vy = rand(18, 45) * (0.55 + (1 - z) * 1.35);
+        const vx = rand(-10, 10) + CONFIG.wind * 60 * (0.2 + (1 - z));
+
+        return {
+          x: rand(0, state.w),
+          y: spawnY,
+          r, vy, vx, z,
+          drift: rand(0.6, 1.8),
+          phase: rand(0, Math.PI * 2),
+          a: rand(0.18, 0.55) * (0.55 + (1 - z) * 0.9),
+          blur: (0.2 + z * 1.2) * 1.2
+        };
+      }
+
+      function seed(){
+        const intensity = clamp(CONFIG.intensity, 0, 2.0);
+        const target = Math.floor((state.w * state.h) / 8000 * intensity);
+        state.flakes = Array.from({ length: target }, () => makeFlake(rand(-state.h, 0)));
+      }
+
+      function draw(t){
+        const dt = Math.min(0.033, ((t - state.lastT) / 1000) || 0.016);
+        state.lastT = t;
+
+        ctx.clearRect(0, 0, state.w, state.h);
+
+        const baseWind = clamp(CONFIG.wind, 0, 0.6);
+        const windGust = baseWind + Math.sin(t / 7000) * 0.05 + Math.sin(t / 18000) * 0.03;
+
+        for (const f of state.flakes){
+          const sway = Math.sin(t / (2400 * f.drift) + f.phase) * (0.25 + (1 - f.z) * 0.8);
+
+          f.x += (f.vx + windGust * 55) * dt + sway;
+          f.y += f.vy * dt;
+
+          if (f.y - f.r > state.h + 10) { Object.assign(f, makeFlake(-10)); f.y = -10; }
+          if (f.x < -20) f.x = state.w + 20;
+          if (f.x > state.w + 20) f.x = -20;
+
+          ctx.save();
+          ctx.globalAlpha = f.a;
+          ctx.fillStyle = "rgba(245,250,255,0.95)";
+          ctx.shadowColor = "rgba(210,230,255,0.35)";
+          ctx.shadowBlur  = f.blur * 6;
+
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        state.raf = requestAnimationFrame(draw);
+      }
+
+      const ro = new ResizeObserver(() => { resize(); seed(); });
+      resize(); seed();
+      ro.observe(stage);
+      state.raf = requestAnimationFrame(draw);
+
+      window.addEventListener("pagehide", () => {
+        ro.disconnect();
+        cancelAnimationFrame(state.raf);
+      });
+    })();
+  </script>
+</body>
+</html>
